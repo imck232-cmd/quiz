@@ -1,9 +1,11 @@
-import { Quiz, QuizResult, StudentData } from "../types";
+
+import { Quiz, QuizResult, StudentData, TeacherProfile } from "../types";
 
 const KEYS = {
   STUDENTS: 'app_students',
   RESULTS: 'app_results',
   QUIZZES: 'app_quizzes',
+  TEACHERS: 'app_teachers',
   CURRENT_USER: 'app_current_user'
 };
 
@@ -23,6 +25,29 @@ export const storageService = {
 
   getStudents: (): StudentData[] => {
     const data = localStorage.getItem(KEYS.STUDENTS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  // --- Teachers ---
+  saveTeacher: (teacher: TeacherProfile) => {
+    const teachers = storageService.getTeachers();
+    // Check if code exists (update or add)
+    const index = teachers.findIndex(t => t.code === teacher.code);
+    if (index >= 0) {
+      teachers[index] = teacher;
+    } else {
+      teachers.push(teacher);
+    }
+    localStorage.setItem(KEYS.TEACHERS, JSON.stringify(teachers));
+  },
+
+  getTeacherByCode: (code: string): TeacherProfile | undefined => {
+    const teachers = storageService.getTeachers();
+    return teachers.find(t => t.code === code);
+  },
+
+  getTeachers: (): TeacherProfile[] => {
+    const data = localStorage.getItem(KEYS.TEACHERS);
     return data ? JSON.parse(data) : [];
   },
 

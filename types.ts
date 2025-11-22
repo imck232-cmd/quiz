@@ -1,3 +1,4 @@
+
 export enum UserRole {
   TEACHER = 'TEACHER',
   STUDENT = 'STUDENT',
@@ -26,6 +27,14 @@ export interface StudentData {
   academicYear: string;
   email?: string;
   registrationDate: string;
+}
+
+export interface TeacherProfile {
+  code: string; // Unique ID/Login Key
+  fullName: string;
+  schoolName: string;
+  subject: string;
+  academicYear: string;
 }
 
 export interface Question {

@@ -1,5 +1,6 @@
+
 import React, { useMemo, useState } from 'react';
-import { StudentData, QuestionType, Question, Quiz } from '../types';
+import { StudentData, QuestionType, Question, Quiz, TeacherProfile } from '../types';
 import { storageService } from '../services/storageService';
 import { generateQuizFromContent } from '../services/geminiService';
 import { Card } from './ui/Card';
@@ -8,14 +9,16 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Download, LogOut, Plus, FileText, Save, Trash2, LayoutDashboard } from 'lucide-react';
+import { LogOut, Plus, FileText, Save, Trash2, LayoutDashboard, Users, X, FileSpreadsheet, FileDown, Printer, Share2 } from 'lucide-react';
 
 interface Props {
+  teacher: TeacherProfile;
   onLogout: () => void;
 }
 
-export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
+export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'CREATE_QUIZ'>('DASHBOARD');
+  const [showStudentModal, setShowStudentModal] = useState(false);
   
   // --- Dashboard State ---
   const [filterGrade, setFilterGrade] = useState<string>('all');
@@ -27,10 +30,10 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [quizMeta, setQuizMeta] = useState({
     title: '',
-    subject: '',
+    subject: teacher.subject,
     grade: '',
     term: 'الفصل الأول',
-    duration: '30', // string for input, convert to number or null
+    duration: '30', // string for input
     isOpenTime: false
   });
   const [content, setContent] = useState('');
@@ -72,6 +75,62 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
     return { totalStudents, totalTaken, passRate, avgScore, relevantResults };
   }, [filteredStudents, results]);
 
+  // --- Export Logic ---
+  const getReportData = () => {
+    return filteredStudents.map(s => {
+      const studentResults = results.filter(r => r.studentId === s.id);
+      const avg = studentResults.length > 0 
+        ? (studentResults.reduce((acc, curr) => acc + curr.score, 0) / studentResults.reduce((acc, curr) => acc + curr.totalScore, 0)) * 100
+        : 0;
+      return {
+        name: s.fullName,
+        school: s.schoolName,
+        grade: s.grade,
+        testsTaken: studentResults.length,
+        average: avg.toFixed(1)
+      };
+    });
+  };
+
+  const handleExportTXT = () => {
+    const data = getReportData();
+    const text = `تقرير الطلاب - ${teacher.schoolName}\nالمادة: ${teacher.subject}\nالتاريخ: ${new Date().toLocaleDateString()}\n\n` +
+      data.map(s => `- الطالب: ${s.name} | المدرسة: ${s.school} | اختبارات: ${s.testsTaken} | النسبة: ${s.average}%`).join('\n');
+    
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `تقرير_الطلاب_${Date.now()}.txt`;
+    link.click();
+  };
+
+  const handleExportExcel = () => {
+    const data = getReportData();
+    // Add BOM for Excel Arabic support
+    let csvContent = "\uFEFF";
+    csvContent += "اسم الطالب,المدرسة,الصف,عدد الاختبارات,النسبة المئوية\n";
+    data.forEach(row => {
+      csvContent += `"${row.name}","${row.school}","${row.grade}","${row.testsTaken}","${row.average}%"\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `تقرير_الطلاب_${Date.now()}.csv`;
+    link.click();
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = `تقرير سريع من المعلم: ${teacher.fullName}\nالمادة: ${teacher.subject}\nإجمالي الطلاب: ${stats.totalStudents}\nمتوسط الدرجات: ${stats.avgScore.toFixed(1)}%`;
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  // --- Chart Data ---
   const chartData = useMemo(() => {
     const grades = Array.from(new Set(students.map(s => s.grade)));
     return grades.map(grade => {
@@ -146,12 +205,13 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
       id: `quiz-${Date.now()}`,
       title: quizMeta.title,
       subject: quizMeta.subject,
-      gradeLevel: quizMeta.grade,
       term: quizMeta.term,
+      gradeLevel: quizMeta.grade,
       date: new Date().toISOString(),
       durationMinutes: quizMeta.isOpenTime ? null : parseInt(quizMeta.duration),
       questions: generatedQuestions,
-      isActive: true
+      isActive: true,
+      createdBy: teacher.fullName
     };
 
     storageService.saveQuiz(newQuiz);
@@ -159,7 +219,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
     setStep(1);
     setGeneratedQuestions([]);
     setContent('');
-    setQuizMeta({ ...quizMeta, title: '', subject: '' });
+    setQuizMeta({ ...quizMeta, title: '' });
     setActiveTab('DASHBOARD');
   };
 
@@ -170,7 +230,6 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
   const handleDeleteQuiz = (id: string) => {
     if(confirm('هل أنت متأكد من حذف هذا الاختبار؟')) {
         storageService.deleteQuiz(id);
-        // Force re-render logic would be better with context, but forcing state update works
         setActiveTab('CREATE_QUIZ'); 
         setTimeout(() => setActiveTab('DASHBOARD'), 10);
     }
@@ -178,12 +237,21 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
 
   // --- Render Methods ---
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 print:hidden">
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-r-4 border-r-blue-500 p-4">
-           <p className="text-sm text-slate-500">إجمالي الطلاب</p>
-           <h3 className="text-2xl font-bold">{stats.totalStudents}</h3>
+        <Card 
+          className="border-r-4 border-r-blue-500 p-4 cursor-pointer hover:shadow-lg transition-shadow group"
+          onClick={() => setShowStudentModal(true)}
+        >
+           <div className="flex justify-between items-start">
+             <div>
+                <p className="text-sm text-slate-500">إجمالي الطلاب</p>
+                <h3 className="text-2xl font-bold group-hover:text-blue-600 transition-colors">{stats.totalStudents}</h3>
+             </div>
+             <Users className="w-6 h-6 text-blue-200 group-hover:text-blue-500" />
+           </div>
+           <p className="text-xs text-slate-400 mt-2">انقر لعرض القائمة</p>
         </Card>
         <Card className="border-r-4 border-r-purple-500 p-4">
            <p className="text-sm text-slate-500">الاختبارات المتاحة</p>
@@ -234,6 +302,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
                           <th className="p-3">عنوان الاختبار</th>
                           <th className="p-3">المادة</th>
                           <th className="p-3">الصف</th>
+                          <th className="p-3">المنشئ</th>
                           <th className="p-3">عدد الأسئلة</th>
                           <th className="p-3">إجراءات</th>
                       </tr>
@@ -244,6 +313,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
                               <td className="p-3 font-medium">{q.title}</td>
                               <td className="p-3">{q.subject}</td>
                               <td className="p-3">{q.gradeLevel}</td>
+                              <td className="p-3 text-sm text-slate-500">{q.createdBy || 'غير محدد'}</td>
                               <td className="p-3">{q.questions.length}</td>
                               <td className="p-3">
                                   <button onClick={() => handleDeleteQuiz(q.id)} className="text-red-500 hover:text-red-700 p-2">
@@ -253,7 +323,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
                           </tr>
                       ))}
                       {quizzes.length === 0 && (
-                          <tr><td colSpan={5} className="p-4 text-center text-slate-400">لا توجد اختبارات نشطة</td></tr>
+                          <tr><td colSpan={6} className="p-4 text-center text-slate-400">لا توجد اختبارات نشطة</td></tr>
                       )}
                   </tbody>
               </table>
@@ -276,8 +346,8 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
             </div>
             <div>
                 <label className="block text-sm font-medium mb-1">المادة</label>
-                <input type="text" className="w-full p-2 border rounded" 
-                    value={quizMeta.subject} onChange={e => setQuizMeta({...quizMeta, subject: e.target.value})} />
+                <input type="text" className="w-full p-2 border rounded bg-slate-100" 
+                    value={quizMeta.subject} readOnly />
             </div>
             <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -424,12 +494,89 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
     </div>
   );
 
+  // --- Student List Modal ---
+  const renderStudentModal = () => (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col print:shadow-none print:max-w-none print:w-full print:h-full">
+        <div className="p-6 border-b flex justify-between items-center print:hidden">
+            <div>
+                <h2 className="text-xl font-bold text-slate-800">تقرير الطلاب التفصيلي</h2>
+                <p className="text-sm text-slate-500">المعلم: {teacher.fullName} | المادة: {teacher.subject}</p>
+            </div>
+            <button onClick={() => setShowStudentModal(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                <X className="w-6 h-6 text-slate-500" />
+            </button>
+        </div>
+        
+        {/* Print Header (Visible only when printing) */}
+        <div className="hidden print:block p-8 text-center border-b-2 border-black mb-4">
+             <h1 className="text-3xl font-bold mb-2">تقرير أداء الطلاب</h1>
+             <div className="flex justify-between text-lg">
+                 <span>المدرسة: {teacher.schoolName}</span>
+                 <span>المادة: {teacher.subject}</span>
+                 <span>المعلم: {teacher.fullName}</span>
+             </div>
+        </div>
+
+        {/* Toolbar */}
+        <div className="p-4 bg-slate-50 border-b flex gap-2 flex-wrap print:hidden">
+            <Button variant="outline" onClick={handleExportTXT} className="text-xs gap-1">
+                <FileText className="w-4 h-4" /> TXT تصدير
+            </Button>
+            <Button variant="outline" onClick={handleExportExcel} className="text-xs gap-1">
+                <FileSpreadsheet className="w-4 h-4" /> Excel تصدير
+            </Button>
+            <Button variant="outline" onClick={handleExportPDF} className="text-xs gap-1">
+                <Printer className="w-4 h-4" /> طباعة / PDF
+            </Button>
+            <Button variant="outline" onClick={handleShareWhatsApp} className="text-xs gap-1 text-green-600 border-green-200 bg-green-50 hover:bg-green-100">
+                <Share2 className="w-4 h-4" /> مشاركة واتساب
+            </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+            <table className="w-full text-right border-collapse">
+                <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300">
+                        <th className="p-3 font-bold text-slate-700 border border-slate-200">اسم الطالب</th>
+                        <th className="p-3 font-bold text-slate-700 border border-slate-200">المدرسة</th>
+                        <th className="p-3 font-bold text-slate-700 border border-slate-200">الصف</th>
+                        <th className="p-3 font-bold text-slate-700 border border-slate-200">عدد الاختبارات</th>
+                        <th className="p-3 font-bold text-slate-700 border border-slate-200">النسبة المئوية</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {getReportData().map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-3 border border-slate-200">{row.name}</td>
+                            <td className="p-3 border border-slate-200">{row.school}</td>
+                            <td className="p-3 border border-slate-200">{row.grade}</td>
+                            <td className="p-3 border border-slate-200">{row.testsTaken}</td>
+                            <td className="p-3 border border-slate-200 font-bold">
+                                <span className={parseFloat(row.average) >= 50 ? 'text-green-600' : 'text-red-600'}>
+                                    {row.average}%
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                    {getReportData().length === 0 && (
+                         <tr><td colSpan={5} className="p-6 text-center text-slate-500">لا توجد بيانات للعرض</td></tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {showStudentModal && renderStudentModal()}
+      
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">لوحة تحكم المعلم</h1>
-          <p className="text-slate-500">إدارة الاختبارات والطلاب</p>
+          <p className="text-slate-500">مرحباً أ. {teacher.fullName} | {teacher.schoolName}</p>
         </div>
         <div className="flex gap-3">
           <Button variant="danger" onClick={onLogout}>
@@ -440,7 +587,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onLogout }) => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex border-b border-slate-200 mb-6 print:hidden">
         <button 
             onClick={() => setActiveTab('DASHBOARD')}
             className={`px-6 py-3 font-medium flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'DASHBOARD' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}

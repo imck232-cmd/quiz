@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, QuestionType, Quiz } from "../types";
 
@@ -99,8 +100,8 @@ export const generateQuizFromContent = async (
       Requirements:
       1. Subject: ${metadata.subject}
       2. Grade Level: ${metadata.grade}
-      3. Generate questions ONLY of the following types: ${questionTypes.join(", ")}.
-      4. For each question, provide the question text, type, options (if MCQ), and a model answer.
+      3. Generate questions ONLY of the following types: ${questionTypes.join(", ")}. Use the exact type names provided.
+      4. For each question, provide the question text, type, options (REQUIRED for MCQ AND TRUE_FALSE), and a model answer.
       5. Assign a default point value (e.g., 5 or 10).
       6. Ensure the output is valid JSON.
       `;
@@ -120,7 +121,7 @@ export const generateQuizFromContent = async (
                   properties: {
                     text: { type: Type.STRING, description: "The question text in Arabic" },
                     type: { type: Type.STRING, description: "One of the requested types" },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Options for MCQ only" },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Options for MCQ and TRUE_FALSE (e.g. ['صواب', 'خطأ'])" },
                     correctAnswer: { type: Type.STRING, description: "The correct answer or model answer" },
                     explanation: { type: Type.STRING, description: "Explanation if needed" },
                     points: { type: Type.NUMBER }
@@ -138,7 +139,7 @@ export const generateQuizFromContent = async (
         return data.questions.map((q: any, index: number) => ({
           id: `gen-${index}-${Date.now()}`,
           text: q.text,
-          type: q.type as QuestionType, // Logic to map string to enum if needed, but Schema ensures strictness
+          type: q.type as QuestionType, 
           options: q.options || [],
           correctAnswer: q.correctAnswer,
           explanation: q.explanation || "",

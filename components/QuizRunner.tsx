@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Quiz, QuestionType, QuizResult, StudentData } from '../types';
 import { Button } from './ui/Button';
@@ -178,12 +179,20 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
 
   // Helper to render input based on type
   const renderInput = () => {
-      switch(question.type) {
-          case QuestionType.MCQ:
-          case QuestionType.TRUE_FALSE:
+      // 1. Prepare Options
+      let currentOptions = question.options;
+      
+      // FIX: Ensure True/False always has options
+      if (question.type === QuestionType.TRUE_FALSE && (!currentOptions || currentOptions.length === 0)) {
+          currentOptions = ['صواب', 'خطأ'];
+      }
+
+      // 2. Determine Input Type
+      if (question.type === QuestionType.MCQ || question.type === QuestionType.TRUE_FALSE) {
+          if (currentOptions && currentOptions.length > 0) {
               return (
                 <div className="space-y-3">
-                    {question.options?.map((option, idx) => (
+                    {currentOptions.map((option, idx) => (
                         <button
                             key={idx}
                             onClick={() => handleAnswer(option)}
@@ -198,21 +207,41 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
                     ))}
                 </div>
               );
-          default:
-              return (
+          } else {
+              // Fallback if options missing for MCQ
+               return (
                   <div className="space-y-2">
+                      <p className="text-sm text-red-500 mb-2">لم تظهر خيارات لهذا السؤال، يرجى كتابة الإجابة:</p>
                       <textarea 
-                          className="w-full p-4 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all min-h-[120px]"
-                          placeholder={
-                            question.type === QuestionType.DRAW ? "يرجى الرسم في ورقة خارجية أو وصف الرسم هنا..." :
-                            "اكتب إجابتك هنا..."
-                          }
+                          className="w-full p-4 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all min-h-[80px]"
+                          placeholder="اكتب إجابتك هنا..."
                           value={answers[question.id] || ''}
                           onChange={(e) => handleAnswer(e.target.value)}
                       />
                   </div>
               );
+          }
       }
+
+      // 3. Default Text Area for all other types with custom placeholders
+      let placeholder = "اكتب إجابتك هنا...";
+      if (question.type === QuestionType.MATCHING) placeholder = "اكتب أزواج المطابقة هنا (مثال: 1-أ، 2-ب)...";
+      if (question.type === QuestionType.EXTRACT) placeholder = "استخرج المطلوب من النص واكتبه هنا...";
+      if (question.type === QuestionType.ENUMERATE) placeholder = "عدد النقاط المطلوبة...";
+      if (question.type === QuestionType.EXPRESSION) placeholder = "اكتب التعبير أو الفقرة المطلوبة...";
+      if (question.type === QuestionType.DRAW) placeholder = "يمكنك وصف الرسم هنا أو الإجابة في ورقة خارجية...";
+      if (question.type === QuestionType.EVIDENCE) placeholder = "اذكر الدليل هنا...";
+
+      return (
+          <div className="space-y-2">
+              <textarea 
+                  className="w-full p-4 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all min-h-[150px]"
+                  placeholder={placeholder}
+                  value={answers[question.id] || ''}
+                  onChange={(e) => handleAnswer(e.target.value)}
+              />
+          </div>
+      );
   }
 
   return (
@@ -249,7 +278,8 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
                     <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">
                         {question.type === QuestionType.MCQ ? 'اختيار من متعدد' : 
                          question.type === QuestionType.TRUE_FALSE ? 'صواب/خطأ' :
-                         'سؤال مقالي / كتابي'}
+                         question.type === QuestionType.MATCHING ? 'وصل / مطابقة' :
+                         'سؤال مقالي'}
                     </span>
                     <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded mr-2">
                         {question.points} درجات

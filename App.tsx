@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
-import { UserRole, StudentData, Quiz } from './types';
+import { UserRole, StudentData, Quiz, TeacherProfile } from './types';
 import { generateDailyQuiz } from './services/geminiService';
 import { storageService } from './services/storageService';
 import { StudentAuth } from './components/StudentAuth';
+import { TeacherAuth } from './components/TeacherAuth';
 import { QuizRunner } from './components/QuizRunner';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { Button } from './components/ui/Button';
@@ -10,12 +12,11 @@ import { Card } from './components/ui/Card';
 import { GraduationCap, Lock, BookOpen, Clock, FileQuestion } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'HOME' | 'QUIZ_LIST' | 'RUNNING_QUIZ' | 'TEACHER_DASH'>('HOME');
+  const [currentView, setCurrentView] = useState<'HOME' | 'QUIZ_LIST' | 'RUNNING_QUIZ' | 'TEACHER_AUTH' | 'TEACHER_DASH'>('HOME');
   const [currentStudent, setCurrentStudent] = useState<StudentData | null>(null);
+  const [currentTeacher, setCurrentTeacher] = useState<TeacherProfile | null>(null);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(false);
-  const [teacherAuth, setTeacherAuth] = useState(false);
-  const [teacherPassword, setTeacherPassword] = useState('');
   const [availableQuizzes, setAvailableQuizzes] = useState<Quiz[]>([]);
 
   const handleStudentLogin = async (student: StudentData) => {
@@ -51,16 +52,9 @@ const App: React.FC = () => {
       setCurrentView('RUNNING_QUIZ');
   };
 
-  const handleTeacherLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Mock password
-    if (teacherPassword === 'admin123') {
-      setTeacherAuth(true);
+  const handleTeacherLogin = (teacher: TeacherProfile) => {
+      setCurrentTeacher(teacher);
       setCurrentView('TEACHER_DASH');
-      setTeacherPassword('');
-    } else {
-      alert('كلمة المرور غير صحيحة');
-    }
   };
 
   const QuizList = () => (
@@ -89,6 +83,9 @@ const App: React.FC = () => {
                                     {quiz.questions.length} سؤال
                                 </div>
                             </div>
+                            <div className="text-xs text-slate-400 mt-2">
+                                بواسطة: {quiz.createdBy || 'النظام الآلي'}
+                            </div>
                         </div>
                         <Button onClick={() => startQuiz(quiz)}>ابدأ الآن</Button>
                     </div>
@@ -104,7 +101,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-tajawal text-slate-900">
       {/* Navigation Bar */}
-      <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">
+      <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('HOME')}>
             <div className="bg-blue-600 p-1.5 rounded-lg">
@@ -116,19 +113,21 @@ const App: React.FC = () => {
           {currentView === 'HOME' && (
             <div className="flex gap-3">
               <button 
-                onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-                className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+                onClick={() => setCurrentView('TEACHER_AUTH')}
+                className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-1"
               >
-                دخول المعلمين
+                <Lock className="w-4 h-4" />
+                دخول الكادر التعليمي
               </button>
             </div>
           )}
-           {currentView !== 'HOME' && currentView !== 'TEACHER_DASH' && (
+           {currentView !== 'HOME' && (
             <div className="flex gap-3">
               <button 
                 onClick={() => {
                     setCurrentView('HOME');
                     setCurrentStudent(null);
+                    setCurrentTeacher(null);
                 }}
                 className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
               >
@@ -155,31 +154,13 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-
-            {/* Teacher Login Footer */}
-            <div className="border-t border-slate-200 pt-10 mt-10">
-              <div className="max-w-sm mx-auto">
-                <div className="text-center mb-6">
-                  <h3 className="text-lg font-bold text-slate-700 flex items-center justify-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    دخول الكادر التعليمي
-                  </h3>
-                </div>
-                <form onSubmit={handleTeacherLogin} className="flex gap-2">
-                  <input
-                    type="password"
-                    placeholder="كلمة المرور (admin123)"
-                    className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-200 outline-none text-sm"
-                    value={teacherPassword}
-                    onChange={(e) => setTeacherPassword(e.target.value)}
-                  />
-                  <Button type="submit" variant="secondary" className="text-sm">
-                    دخول
-                  </Button>
-                </form>
-              </div>
-            </div>
           </div>
+        )}
+
+        {currentView === 'TEACHER_AUTH' && (
+             <div className="max-w-md mx-auto mt-8">
+                 <TeacherAuth onLogin={handleTeacherLogin} />
+             </div>
         )}
 
         {currentView === 'QUIZ_LIST' && <QuizList />}
@@ -195,11 +176,14 @@ const App: React.FC = () => {
           />
         )}
 
-        {currentView === 'TEACHER_DASH' && teacherAuth && (
-          <TeacherDashboard onLogout={() => {
-            setTeacherAuth(false);
-            setCurrentView('HOME');
-          }} />
+        {currentView === 'TEACHER_DASH' && currentTeacher && (
+          <TeacherDashboard 
+            teacher={currentTeacher}
+            onLogout={() => {
+                setCurrentTeacher(null);
+                setCurrentView('HOME');
+            }} 
+          />
         )}
       </main>
     </div>
