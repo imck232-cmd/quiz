@@ -16,7 +16,11 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeElapsed, setTimeElapsed] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(quiz.durationMinutes ? quiz.durationMinutes * 60 : 0);
+  
+  // Initialize timeLeft only if duration exists
+  const hasDuration = typeof quiz.durationMinutes === 'number' && quiz.durationMinutes > 0;
+  const [timeLeft, setTimeLeft] = useState(hasDuration ? (quiz.durationMinutes! * 60) : 0);
+  
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
   
@@ -26,27 +30,34 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
     answersRef.current = answers;
   }, [answers]);
 
-  // Timer Effect: Handles the ticking
+  // Timer Effect
   useEffect(() => {
     if (isSubmitted) return;
 
     const timerId = window.setInterval(() => {
       setTimeElapsed(prev => prev + 1);
-      if (quiz.durationMinutes) {
-        setTimeLeft(prev => Math.max(0, prev - 1));
+      
+      if (hasDuration) {
+        setTimeLeft(prev => {
+           // Prevent going below 0
+           if (prev <= 0) return 0;
+           return prev - 1;
+        });
       }
     }, 1000);
 
     return () => clearInterval(timerId);
-  }, [isSubmitted, quiz.durationMinutes]);
+  }, [isSubmitted, hasDuration]);
 
-  // Time's Up Effect: Handles the auto-submission
+  // Auto-Submit Effect
   useEffect(() => {
-    if (quiz.durationMinutes && timeLeft === 0 && !isSubmitted) {
+    // Only auto-submit if there is a duration, time reached 0, and not already submitted
+    if (hasDuration && timeLeft === 0 && !isSubmitted) {
+      console.log("Time is up! Auto submitting...");
       handleSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, isSubmitted, quiz.durationMinutes]);
+  }, [timeLeft, isSubmitted, hasDuration]);
 
   const handleAnswer = (value: string) => {
     setAnswers(prev => ({
@@ -244,7 +255,7 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
         <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
             <div className="flex items-center gap-2 text-slate-700 font-bold">
                 <Clock className="w-5 h-5 text-blue-600" />
-                {quiz.durationMinutes ? (
+                {hasDuration ? (
                     <span className={timeLeft < 60 ? 'text-red-500 animate-pulse' : ''}>
                         {formatTime(timeLeft)}
                     </span>

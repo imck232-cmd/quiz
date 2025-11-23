@@ -188,7 +188,9 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
       setGeneratedQuestions(questions);
       setStep(2);
     } catch (error: any) {
-      alert('فشل في إنشاء الأسئلة: ' + (error.message || 'خطأ غير معروف'));
+      // Display the specific error message propagated from the service
+      alert('فشل في إنشاء الأسئلة:\n' + (error.message || 'خطأ غير معروف'));
+      console.error(error);
     } finally {
       setIsGenerating(false);
     }

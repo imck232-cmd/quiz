@@ -2,36 +2,41 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, QuestionType, Quiz } from "../types";
 
-// Initialize AI safely. If key is missing, we don't crash immediately, 
-// but requests will fail gracefully in the try/catch blocks.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+// Initialize AI safely. The key might be empty at this stage, so we validate inside functions.
+const apiKey = process.env.API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
 
-// Helper to handle AI responses that might include Markdown code blocks
+// Robust helper to clean and parse AI JSON responses
 const cleanAndParseJSON = (text: string) => {
+  if (!text) throw new Error("Received empty response from AI");
+
   try {
-    // Remove ```json and ``` fences if they exist
+    // 1. Try removing markdown code blocks
     const cleaned = text.replace(/```json\n?|```/g, '').trim();
     return JSON.parse(cleaned);
   } catch (e) {
-    console.error("JSON Parse Error:", e);
-    // Fallback: try to extract the first JSON object found in text
+    console.warn("Direct JSON parse failed, attempting heuristic extraction...", e);
+    // 2. Fallback: Extract content between first { and last }
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
-    if (start !== -1 && end !== -1) {
+    
+    if (start !== -1 && end !== -1 && end > start) {
        try {
-         return JSON.parse(text.substring(start, end + 1));
+         const extracted = text.substring(start, end + 1);
+         return JSON.parse(extracted);
        } catch (innerE) {
-         throw e;
+         throw new Error("Failed to parse extracted JSON content");
        }
     }
-    throw e;
+    throw new Error("Response did not contain valid JSON");
   }
 };
 
 export const generateDailyQuiz = async (dateStr: string): Promise<Quiz> => {
   try {
-    if (!process.env.API_KEY) {
-        throw new Error("API Key is missing");
+    if (!apiKey) {
+        console.error("API Key is missing in environment variables.");
+        throw new Error("MISSING_API_KEY");
     }
 
     const model = "gemini-2.5-flash";
@@ -93,10 +98,16 @@ export const generateDailyQuiz = async (dateStr: string): Promise<Quiz> => {
         isActive: true
       };
     }
-    throw new Error("Empty response");
-  } catch (error) {
-    console.error("Daily Quiz Generation Failed (Using Fallback):", error);
-    // Return reliable fallback data if API fails or key is invalid
+    throw new Error("Empty response from AI");
+  } catch (error: any) {
+    console.error("Daily Quiz Generation Failed:", error);
+    
+    // Determine if it's an API Key issue to log a specific warning
+    if (error.message === "MISSING_API_KEY" || error.toString().includes("403") || error.toString().includes("API key")) {
+        console.warn("CRITICAL: API Key is invalid or missing. Using offline fallback.");
+    }
+
+    // Return reliable fallback data so the app doesn't crash on start
     return {
         id: dateStr,
         date: dateStr,
@@ -133,11 +144,13 @@ export const generateQuizFromContent = async (
     questionTypes: QuestionType[],
     metadata: { title: string; grade: string; subject: string }
   ): Promise<Question[]> => {
-    try {
-      if (!process.env.API_KEY) {
-          throw new Error("مفتاح API غير موجود. يرجى التحقق من الإعدادات.");
-      }
+    
+    // Explicit check before attempting request
+    if (!apiKey) {
+        throw new Error("مفتاح API غير موجود. يرجى التحقق من إعدادات النشر (Environment Variables).");
+    }
 
+    try {
       const model = "gemini-2.5-flash";
       
       const systemInstruction = `
@@ -187,6 +200,11 @@ export const generateQuizFromContent = async (
   
       if (response.text) {
         const data = cleanAndParseJSON(response.text);
+        
+        if (!data.questions || !Array.isArray(data.questions)) {
+            throw new Error("تنسيق البيانات المستلمة غير صحيح");
+        }
+
         return data.questions.map((q: any, index: number) => ({
           id: `gen-${index}-${Date.now()}`,
           text: q.text,
@@ -197,13 +215,18 @@ export const generateQuizFromContent = async (
           points: q.points || 5
         }));
       }
-      throw new Error("فشل في استلام رد من الذكاء الاصطناعي");
+      throw new Error("فشل في استلام رد من الذكاء الاصطناعي (رد فارغ)");
     } catch (error: any) {
       console.error("AI Generation Error:", error);
-      // Propagate a clean error message
-      if (error.message?.includes("API key")) {
-         throw new Error("مفتاح API غير صالح أو مفقود.");
+      
+      // Provide user-friendly error messages
+      if (error.message?.includes("API key") || error.message?.includes("403") || error.message?.includes("400")) {
+         throw new Error("خطأ في مفتاح API. يرجى التأكد من صلاحية المفتاح وإعدادات المشروع.");
       }
+      if (error.message?.includes("quota")) {
+         throw new Error("تم تجاوز حد الاستخدام المجاني (Quota Exceeded).");
+      }
+      
       throw error;
     }
   };
