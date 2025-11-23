@@ -18,7 +18,15 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
   const [timeLeft, setTimeLeft] = useState(quiz.durationMinutes ? quiz.durationMinutes * 60 : 0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
-  const timerRef = useRef<number>();
+  
+  // Fix: Initialize useRef with undefined explicitly to avoid "Expected 1 arguments" error
+  const timerRef = useRef<number | undefined>(undefined);
+  
+  // Fix: Use ref to track answers so the timer callback (handleSubmit) has access to the latest answers
+  const answersRef = useRef<Record<string, string>>(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
     if (!isSubmitted) {
@@ -35,7 +43,11 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
         }
       }, 1000);
     }
-    return () => clearInterval(timerRef.current);
+    return () => {
+        if (timerRef.current !== undefined) {
+            clearInterval(timerRef.current);
+        }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubmitted, quiz.durationMinutes]);
 
@@ -48,15 +60,20 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
 
   const handleSubmit = () => {
     if (isSubmitted) return;
-    clearInterval(timerRef.current);
+    if (timerRef.current !== undefined) {
+        clearInterval(timerRef.current);
+    }
     setIsSubmitted(true);
 
     let score = 0;
     let totalScore = 0;
 
+    // Use answersRef to get the latest state (fixes stale closure when called via timer)
+    const currentAnswers = answersRef.current;
+
     quiz.questions.forEach(q => {
       totalScore += q.points;
-      const studentAns = answers[q.id]?.trim().toLowerCase();
+      const studentAns = currentAnswers[q.id]?.trim().toLowerCase();
       const correctAns = q.correctAnswer?.trim().toLowerCase();
       
       // Automatic grading for objective questions
@@ -80,7 +97,7 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
       quizTitle: quiz.title,
       score,
       totalScore,
-      answers,
+      answers: currentAnswers,
       submittedAt: new Date().toISOString(),
       isPassed: (score / totalScore) >= 0.5
     };
