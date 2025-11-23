@@ -24,7 +24,7 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const students = useMemo(() => storageService.getStudents(), []);
   const results = useMemo(() => storageService.getResults(), []);
-  const quizzes = useMemo(() => storageService.getQuizzes(), [activeTab]); // Refresh when tab changes
+  const quizzes = useMemo(() => storageService.getQuizzes(), [activeTab]);
 
   // --- Create Quiz State ---
   const [isGenerating, setIsGenerating] = useState(false);
@@ -33,13 +33,13 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
     subject: teacher.subject,
     grade: '',
     term: 'الفصل الأول',
-    duration: '30', // string for input
+    duration: '30',
     isOpenTime: false
   });
   const [content, setContent] = useState('');
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>([QuestionType.MCQ, QuestionType.TRUE_FALSE]);
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
-  const [step, setStep] = useState<1 | 2>(1); // 1: Input, 2: Review
+  const [step, setStep] = useState<1 | 2>(1);
 
   const allTypes = [
     { id: QuestionType.MCQ, label: 'اختيار من متعدد' },
@@ -106,7 +106,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
 
   const handleExportExcel = () => {
     const data = getReportData();
-    // Add BOM for Excel Arabic support
     let csvContent = "\uFEFF";
     csvContent += "اسم الطالب,المدرسة,الصف,عدد الاختبارات,النسبة المئوية\n";
     data.forEach(row => {
@@ -188,8 +187,8 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
       });
       setGeneratedQuestions(questions);
       setStep(2);
-    } catch (error) {
-      alert('فشل في إنشاء الأسئلة، يرجى المحاولة مرة أخرى');
+    } catch (error: any) {
+      alert('فشل في إنشاء الأسئلة: ' + (error.message || 'خطأ غير معروف'));
     } finally {
       setIsGenerating(false);
     }
@@ -235,10 +234,8 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
     }
   };
 
-  // --- Render Methods ---
   const renderDashboard = () => (
     <div className="space-y-6 print:hidden">
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card 
           className="border-r-4 border-r-blue-500 p-4 cursor-pointer hover:shadow-lg transition-shadow group"
@@ -336,7 +333,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
     <div className="space-y-6">
       {step === 1 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Settings Column */}
           <Card className="lg:col-span-1 space-y-4 h-fit">
             <h3 className="font-bold text-lg mb-4">1. إعدادات الاختبار</h3>
             <div>
@@ -385,7 +381,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
             )}
           </Card>
 
-          {/* Content & Types Column */}
           <Card className="lg:col-span-2 space-y-4">
             <h3 className="font-bold text-lg mb-4">2. المحتوى والأسئلة</h3>
             
@@ -494,7 +489,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
     </div>
   );
 
-  // --- Student List Modal ---
   const renderStudentModal = () => (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col print:shadow-none print:max-w-none print:w-full print:h-full">
@@ -508,7 +502,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
             </button>
         </div>
         
-        {/* Print Header (Visible only when printing) */}
         <div className="hidden print:block p-8 text-center border-b-2 border-black mb-4">
              <h1 className="text-3xl font-bold mb-2">تقرير أداء الطلاب</h1>
              <div className="flex justify-between text-lg">
@@ -518,7 +511,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
              </div>
         </div>
 
-        {/* Toolbar */}
         <div className="p-4 bg-slate-50 border-b flex gap-2 flex-wrap print:hidden">
             <Button variant="outline" onClick={handleExportTXT} className="text-xs gap-1">
                 <FileText className="w-4 h-4" /> TXT تصدير
@@ -586,7 +578,6 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 mb-6 print:hidden">
         <button 
             onClick={() => setActiveTab('DASHBOARD')}

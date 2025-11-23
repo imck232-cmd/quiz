@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Quiz, QuestionType, QuizResult, StudentData } from '../types';
 import { Button } from './ui/Button';
@@ -19,37 +20,33 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
   
-  // Fix: Initialize useRef with undefined explicitly to avoid "Expected 1 arguments" error
-  const timerRef = useRef<number | undefined>(undefined);
-  
-  // Fix: Use ref to track answers so the timer callback (handleSubmit) has access to the latest answers
+  // Use a ref for answers to ensure we always have the latest state when submitting
   const answersRef = useRef<Record<string, string>>(answers);
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
 
+  // Timer Effect: Handles the ticking
   useEffect(() => {
-    if (!isSubmitted) {
-      timerRef.current = window.setInterval(() => {
-        setTimeElapsed(prev => prev + 1);
-        if (quiz.durationMinutes) {
-            setTimeLeft((prev) => {
-            if (prev <= 1) {
-                handleSubmit();
-                return 0;
-            }
-            return prev - 1;
-            });
-        }
-      }, 1000);
-    }
-    return () => {
-        if (timerRef.current !== undefined) {
-            clearInterval(timerRef.current);
-        }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isSubmitted) return;
+
+    const timerId = window.setInterval(() => {
+      setTimeElapsed(prev => prev + 1);
+      if (quiz.durationMinutes) {
+        setTimeLeft(prev => Math.max(0, prev - 1));
+      }
+    }, 1000);
+
+    return () => clearInterval(timerId);
   }, [isSubmitted, quiz.durationMinutes]);
+
+  // Time's Up Effect: Handles the auto-submission
+  useEffect(() => {
+    if (quiz.durationMinutes && timeLeft === 0 && !isSubmitted) {
+      handleSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, isSubmitted, quiz.durationMinutes]);
 
   const handleAnswer = (value: string) => {
     setAnswers(prev => ({
@@ -60,15 +57,10 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
 
   const handleSubmit = () => {
     if (isSubmitted) return;
-    if (timerRef.current !== undefined) {
-        clearInterval(timerRef.current);
-    }
     setIsSubmitted(true);
 
     let score = 0;
     let totalScore = 0;
-
-    // Use answersRef to get the latest state (fixes stale closure when called via timer)
     const currentAnswers = answersRef.current;
 
     quiz.questions.forEach(q => {
@@ -82,10 +74,9 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
              score += q.points;
          }
       } else {
-        // Subjective questions default to 0 until graded (or give full mark if strictly self-assessment demo)
-        // For this demo, we will assume correct if not empty for subjective types to show progress
+        // Optimistic grading for subjective questions for demo purposes
         if (studentAns && studentAns.length > 0) {
-             score += q.points; // Optimistic grading for demo
+             score += q.points;
         }
       }
     });
@@ -141,7 +132,6 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
             <h3 className="text-xl font-bold text-slate-700 mb-4">مراجعة الإجابات</h3>
             {quiz.questions.map((q, idx) => {
                 const studentAnswer = result.answers[q.id];
-                // Only show color feedback for objective questions
                 const isObjective = [QuestionType.MCQ, QuestionType.TRUE_FALSE, QuestionType.FILL_BLANK].includes(q.type);
                 const isCorrect = isObjective && studentAnswer?.trim().toLowerCase() === q.correctAnswer?.trim().toLowerCase();
                 const borderColor = isObjective 
@@ -193,17 +183,12 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
   const isLastQuestion = currentQIndex === quiz.questions.length - 1;
   const progress = ((currentQIndex + 1) / quiz.questions.length) * 100;
 
-  // Helper to render input based on type
   const renderInput = () => {
-      // 1. Prepare Options
       let currentOptions = question.options;
-      
-      // FORCE Options for True/False if missing
       if (question.type === QuestionType.TRUE_FALSE && (!currentOptions || currentOptions.length === 0)) {
           currentOptions = ['صواب', 'خطأ'];
       }
 
-      // 2. Determine Input Type - Buttons for MCQ/TF
       if (question.type === QuestionType.MCQ || question.type === QuestionType.TRUE_FALSE) {
           if (currentOptions && currentOptions.length > 0) {
               return (
@@ -224,7 +209,6 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
                 </div>
               );
           } else {
-              // Fallback if options missing (should not happen for T/F due to check above)
                return (
                   <div className="space-y-2">
                       <p className="text-sm text-red-500 mb-2">لم تظهر خيارات لهذا السؤال، يرجى كتابة الإجابة:</p>
@@ -239,19 +223,9 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
           }
       }
 
-      // 3. Default Text Area for ALL other types
       let placeholder = "اكتب إجابتك هنا...";
-      
-      switch (question.type) {
-          case QuestionType.MATCHING: placeholder = "اكتب أزواج المطابقة هنا (مثال: 1-أ، 2-ب)..."; break;
-          case QuestionType.EXTRACT: placeholder = "استخرج المطلوب من النص واكتبه هنا..."; break;
-          case QuestionType.ENUMERATE: placeholder = "عدد النقاط المطلوبة (كل نقطة في سطر)..."; break;
-          case QuestionType.EXPRESSION: placeholder = "اكتب التعبير أو الفقرة المطلوبة..."; break;
-          case QuestionType.DRAW: placeholder = "يمكنك وصف الرسم هنا أو الإجابة في ورقة خارجية..."; break;
-          case QuestionType.EVIDENCE: placeholder = "اذكر الدليل أو البرهان..."; break;
-          case QuestionType.FILL_BLANK: placeholder = "اكتب الكلمة المفقودة..."; break;
-          default: placeholder = "اكتب إجابتك هنا..."; break;
-      }
+      if (question.type === QuestionType.MATCHING) placeholder = "اكتب أزواج المطابقة هنا (مثال: 1-أ، 2-ب)...";
+      else if (question.type === QuestionType.FILL_BLANK) placeholder = "اكتب الكلمة المفقودة...";
 
       return (
           <div className="space-y-2">
@@ -267,7 +241,6 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
 
   return (
     <div className="max-w-3xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
             <div className="flex items-center gap-2 text-slate-700 font-bold">
                 <Clock className="w-5 h-5 text-blue-600" />
@@ -284,7 +257,6 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
             </div>
         </div>
 
-        {/* Progress Bar */}
         <div className="w-full bg-slate-200 h-2 rounded-full mb-6 overflow-hidden">
             <div 
                 className="bg-blue-600 h-full transition-all duration-300 ease-out"
@@ -292,16 +264,11 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
             />
         </div>
 
-        {/* Question Card */}
         <Card className="min-h-[400px] flex flex-col justify-between">
             <div>
                 <div className="mb-4">
                     <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        {question.type === QuestionType.MCQ ? 'اختيار من متعدد' : 
-                         question.type === QuestionType.TRUE_FALSE ? 'صواب/خطأ' :
-                         question.type === QuestionType.MATCHING ? 'وصل / مطابقة' :
-                         question.type === QuestionType.FILL_BLANK ? 'أكمل الفراغ' :
-                         'سؤال مقالي'}
+                        {question.type}
                     </span>
                     <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded mr-2">
                         {question.points} درجات
