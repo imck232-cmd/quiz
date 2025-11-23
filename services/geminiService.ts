@@ -1,18 +1,29 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, QuestionType, Quiz } from "../types";
 
-// Initialize AI safely. The key might be empty at this stage, so we validate inside functions.
-const apiKey = process.env.API_KEY || "";
-const ai = new GoogleGenAI({ apiKey });
+// Lazy initialization to prevent app crash on load if key is missing
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (aiInstance) return aiInstance;
+  
+  const apiKey = process.env.API_KEY ? process.env.API_KEY.trim() : "";
+  if (!apiKey) {
+    console.warn("API Key is missing in environment variables.");
+  }
+  
+  // We initialize here. If the SDK throws due to invalid config, it will be caught by the calling function's try-catch block
+  aiInstance = new GoogleGenAI({ apiKey });
+  return aiInstance;
+};
 
 // Robust helper to clean and parse AI JSON responses
 const cleanAndParseJSON = (text: string) => {
   if (!text) throw new Error("Received empty response from AI");
 
   try {
-    // 1. Try removing markdown code blocks
-    const cleaned = text.replace(/```json\n?|```/g, '').trim();
+    // 1. Try removing markdown code blocks (case insensitive for JSON tag)
+    const cleaned = text.replace(/```json\s*|```/gi, '').trim();
     return JSON.parse(cleaned);
   } catch (e) {
     console.warn("Direct JSON parse failed, attempting heuristic extraction...", e);
@@ -25,7 +36,7 @@ const cleanAndParseJSON = (text: string) => {
          const extracted = text.substring(start, end + 1);
          return JSON.parse(extracted);
        } catch (innerE) {
-         throw new Error("Failed to parse extracted JSON content");
+         throw new Error("Failed to parse extracted JSON content: " + (innerE as Error).message);
        }
     }
     throw new Error("Response did not contain valid JSON");
@@ -34,8 +45,10 @@ const cleanAndParseJSON = (text: string) => {
 
 export const generateDailyQuiz = async (dateStr: string): Promise<Quiz> => {
   try {
+    const ai = getAI();
+    const apiKey = process.env.API_KEY;
+
     if (!apiKey) {
-        console.error("API Key is missing in environment variables.");
         throw new Error("MISSING_API_KEY");
     }
 
@@ -76,6 +89,11 @@ export const generateDailyQuiz = async (dateStr: string): Promise<Quiz> => {
 
     if (response.text) {
       const data = cleanAndParseJSON(response.text);
+      
+      if (!data.questions || !Array.isArray(data.questions)) {
+          throw new Error("Invalid format: 'questions' array missing");
+      }
+
       const questions: Question[] = data.questions.map((q: any, index: number) => ({
         id: `q-${index}-${Date.now()}`,
         text: q.text,
@@ -146,11 +164,13 @@ export const generateQuizFromContent = async (
   ): Promise<Question[]> => {
     
     // Explicit check before attempting request
+    const apiKey = process.env.API_KEY ? process.env.API_KEY.trim() : "";
     if (!apiKey) {
-        throw new Error("مفتاح API غير موجود. يرجى التحقق من إعدادات النشر (Environment Variables).");
+        throw new Error("مفتاح API غير موجود. يرجى التحقق من إعدادات النشر (Environment Variables) في Vercel.");
     }
 
     try {
+      const ai = getAI();
       const model = "gemini-2.5-flash";
       
       const systemInstruction = `
@@ -221,7 +241,7 @@ export const generateQuizFromContent = async (
       
       // Provide user-friendly error messages
       if (error.message?.includes("API key") || error.message?.includes("403") || error.message?.includes("400")) {
-         throw new Error("خطأ في مفتاح API. يرجى التأكد من صلاحية المفتاح وإعدادات المشروع.");
+         throw new Error("خطأ في مفتاح API. يرجى التأكد من صلاحية المفتاح في إعدادات المشروع (Vercel Project Settings).");
       }
       if (error.message?.includes("quota")) {
          throw new Error("تم تجاوز حد الاستخدام المجاني (Quota Exceeded).");

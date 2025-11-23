@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Quiz, QuestionType, QuizResult, StudentData } from '../types';
 import { Button } from './ui/Button';
@@ -30,43 +29,8 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
     answersRef.current = answers;
   }, [answers]);
 
-  // Timer Effect
-  useEffect(() => {
-    if (isSubmitted) return;
-
-    const timerId = window.setInterval(() => {
-      setTimeElapsed(prev => prev + 1);
-      
-      if (hasDuration) {
-        setTimeLeft(prev => {
-           // Prevent going below 0
-           if (prev <= 0) return 0;
-           return prev - 1;
-        });
-      }
-    }, 1000);
-
-    return () => clearInterval(timerId);
-  }, [isSubmitted, hasDuration]);
-
-  // Auto-Submit Effect
-  useEffect(() => {
-    // Only auto-submit if there is a duration, time reached 0, and not already submitted
-    if (hasDuration && timeLeft === 0 && !isSubmitted) {
-      console.log("Time is up! Auto submitting...");
-      handleSubmit();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, isSubmitted, hasDuration]);
-
-  const handleAnswer = (value: string) => {
-    setAnswers(prev => ({
-      ...prev,
-      [quiz.questions[currentQIndex].id]: value
-    }));
-  };
-
-  const handleSubmit = () => {
+  // Handle Submission Logic
+  const handleSubmit = useRef(() => {
     if (isSubmitted) return;
     setIsSubmitted(true);
 
@@ -106,6 +70,36 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
 
     setResult(resultData);
     storageService.saveResult(resultData);
+  }).current;
+
+  // Timer Effect - Countdown
+  useEffect(() => {
+    if (isSubmitted) return;
+
+    const timerId = window.setInterval(() => {
+      setTimeElapsed(prev => prev + 1);
+      
+      if (hasDuration) {
+        setTimeLeft(prev => Math.max(0, prev - 1));
+      }
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [isSubmitted, hasDuration]);
+
+  // Timer Effect - Check for timeout
+  useEffect(() => {
+    if (hasDuration && timeLeft <= 0 && !isSubmitted) {
+        handleSubmit();
+    }
+  }, [timeLeft, hasDuration, isSubmitted, handleSubmit]);
+
+
+  const handleAnswer = (value: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [quiz.questions[currentQIndex].id]: value
+    }));
   };
 
   const formatTime = (seconds: number) => {
@@ -303,7 +297,7 @@ export const QuizRunner: React.FC<Props> = ({ quiz, student, onComplete }) => {
                 </Button>
                 
                 {isLastQuestion ? (
-                    <Button variant="primary" onClick={handleSubmit} className="bg-green-600 hover:bg-green-700">
+                    <Button variant="primary" onClick={() => handleSubmit()} className="bg-green-600 hover:bg-green-700">
                         إنهاء الاختبار
                     </Button>
                 ) : (

@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { StudentData, QuestionType, Question, Quiz, TeacherProfile } from '../types';
 import { storageService } from '../services/storageService';
@@ -188,8 +187,8 @@ export const TeacherDashboard: React.FC<Props> = ({ teacher, onLogout }) => {
       setGeneratedQuestions(questions);
       setStep(2);
     } catch (error: any) {
-      // Display the specific error message propagated from the service
-      alert('فشل في إنشاء الأسئلة:\n' + (error.message || 'خطأ غير معروف'));
+      // Show explicit error message to help with debugging deployment issues
+      alert(`فشل في إنشاء الأسئلة. \n\nالسبب: ${error.message || 'خطأ غير معروف'}`);
       console.error(error);
     } finally {
       setIsGenerating(false);
